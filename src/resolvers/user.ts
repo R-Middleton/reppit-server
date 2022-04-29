@@ -132,4 +132,19 @@ export class UserResolver {
       user,
     };
   }
+
+  @Mutation(() => Boolean)
+  async Logout(@Ctx() { req, res }: MyContext) {
+    return new Promise((resolve) =>
+      req.session!.destroy((err) => {
+        res.clearCookie(process.env.SESSION_NAME!);
+        if (err) {
+          console.log(err);
+          resolve(false);
+          return;
+        }
+        resolve(true);
+      })
+    );
+  }
 }
