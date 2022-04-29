@@ -9,7 +9,7 @@ import { HelloResolver } from './resolvers/hello';
 import { PostResolver } from './resolvers/post';
 import { UserResolver } from './resolvers/user';
 import session from 'express-session';
-import { createClient } from 'redis';
+import Redis from 'ioredis';
 import connectRedis from 'connect-redis';
 import { MyContext } from './types';
 import cors from 'cors';
@@ -26,9 +26,8 @@ const main = async () => {
 
   const app = express();
 
-  let RedisStore = connectRedis(session);
-  let redisClient = createClient({ legacyMode: true });
-  redisClient.connect().catch(console.error);
+  const RedisStore = connectRedis(session);
+  const redis = new Redis();
 
   app.use(cors({ origin: 'http://localhost:3000', credentials: true }));
 
@@ -36,7 +35,7 @@ const main = async () => {
     session({
       name: COOKIENAME,
       store: new RedisStore({
-        client: redisClient as any,
+        client: redis as any,
         disableTouch: false,
       }),
       cookie: {
@@ -56,7 +55,7 @@ const main = async () => {
       resolvers: [HelloResolver, PostResolver, UserResolver],
       validate: false,
     }),
-    context: ({ req, res }): MyContext => ({ em: orm.em, req, res }),
+    context: ({ req, res }): MyContext => ({ em: orm.em, req, res, redis }),
   });
 
   apolloServer.start().then(() => {
