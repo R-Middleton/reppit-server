@@ -34,21 +34,20 @@ class UserResponse {
 @Resolver()
 export class UserResolver {
   @Query(() => User, { nullable: true })
-  async me(@Ctx() { req, em }: MyContext) {
+  me(@Ctx() { req }: MyContext): Promise<User | null> {
     // you are not logged in
     if (!req.session!.userId) {
-      return null;
+      return null!;
     }
-    const user = await em.findOne(User, { _id: req.session!.userId });
-    return user;
+
+    return User.findOne({ where: { id: req.session!.userId } });
   }
 
   @Mutation(() => UserResponse)
   async ChangePassword(
     @Arg('token') token: string,
     @Arg('newPassword') newPassword: string,
-    @Ctx()
-    { redis, em, req }: MyContext
+    @Ctx() { redis, req }: MyContext
   ): Promise<UserResponse> {
     if (newPassword.length <= 3) {
       return {
@@ -61,6 +60,7 @@ export class UserResolver {
       };
     }
 
+    console.log('redis', redis);
     const key = FORGET_PASSWORD_PREFIX + token;
     const userId = await redis.get(key);
     if (!userId) {
@@ -74,7 +74,13 @@ export class UserResolver {
       };
     }
 
-    const user = await em.findOne(User, { _id: parseInt(userId) });
+    const userIdNum = parseInt(userId);
+    const user = await User.findOne({
+      where: {
+        id: userIdNum,
+      },
+    });
+
     if (!user) {
       return {
         errors: [
@@ -87,20 +93,20 @@ export class UserResolver {
     }
 
     user.password = await argon2.hash(newPassword);
-    await em.persistAndFlush(user);
+    await User.update({ id: userIdNum }, { password: user.password });
 
     await redis.del(key);
     //log user in after resetting password
-    req.session.userId = user._id;
+    req.session.userId = user.id;
     return { user };
   }
 
   @Mutation(() => Boolean)
   async ForgotPassword(
     @Arg('email') email: string,
-    @Ctx() { em, redis }: MyContext
+    @Ctx() { redis }: MyContext
   ) {
-    const user = await em.findOne(User, { email });
+    const user = await User.findOne({ where: { email } });
     if (!user) {
       // the email isnt in the db
       return true;
@@ -109,7 +115,7 @@ export class UserResolver {
     const token = v4();
     await redis.set(
       FORGET_PASSWORD_PREFIX + token,
-      user._id,
+      user.id,
       'EX',
       1000 * 60 * 60
     );
@@ -124,20 +130,21 @@ export class UserResolver {
   @Mutation(() => UserResponse)
   async Register(
     @Arg('options') options: UsernamePasswordInput,
-    @Ctx() { em, req }: MyContext
+    @Ctx() { req }: MyContext
   ): Promise<UserResponse> {
     const errors = validateRegsiter(options);
     if (errors) {
       return { errors };
     }
     const hashedPassword = await argon2.hash(options.password);
-    const user = em.create(User, {
+    const user = User.create({
       username: options.username,
       password: hashedPassword,
       email: options.email,
     });
+
     try {
-      await em.persistAndFlush(user);
+      await user.save();
     } catch (err) {
       // duplicate username or email error
       if (err.code === '23505' || err.detail.includes('already exists')) {
@@ -154,7 +161,7 @@ export class UserResolver {
       }
     }
 
-    req.session!.userId = user._id;
+    req.session!.userId = user.id;
 
     return {
       user,
@@ -165,13 +172,12 @@ export class UserResolver {
   async Login(
     @Arg('usernameOrEmail') usernameOrEmail: string,
     @Arg('password') password: string,
-    @Ctx() { em, req }: MyContext
+    @Ctx() { req }: MyContext
   ): Promise<UserResponse> {
-    const user = await em.findOne(
-      User,
+    const user = await User.findOne(
       !usernameOrEmail.includes('@')
-        ? { username: usernameOrEmail }
-        : { email: usernameOrEmail }
+        ? { where: { username: usernameOrEmail } }
+        : { where: { email: usernameOrEmail } }
     );
     if (!user) {
       return {
@@ -198,7 +204,7 @@ export class UserResolver {
     // Store user ID session
     // This will set a cookie on the user
     // and keep them logged in
-    req.session!.userId = user._id;
+    req.session!.userId = user.id;
 
     return {
       user,

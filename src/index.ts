@@ -25,19 +25,24 @@ const main = async () => {
   const dataSource = new DataSource({
     type: 'postgres',
     database: 'reppit',
-    username: 'postgres',
+    username: 'myuser',
     password: '',
     logging: true,
     synchronize: true,
     entities: [Post, User],
   });
-
+  await dataSource.initialize();
   const app = express();
+
+  app.use(
+    cors({
+      origin: ['http://localhost:3000', 'https://studio.apollographql.com'],
+      credentials: true,
+    })
+  );
 
   const RedisStore = connectRedis(session);
   const redis = new Redis();
-
-  app.use(cors({ origin: 'http://localhost:3000', credentials: true }));
 
   app.use(
     session({
