@@ -5,15 +5,16 @@ import { Arg, Ctx, Mutation, Query, Resolver } from 'type-graphql';
 @Resolver()
 export class PostResolver {
   @Query(() => [Post])
-  posts(@Ctx() { em }: MyContext): Promise<Post[]> {
-    return em.find(Post, {});
+  async posts(): Promise<Post[]> {
+    return Post.find();
   }
 
   @Query(() => Post, { nullable: true })
-  post(@Arg('id') id: number, @Ctx() { em }: MyContext): Promise<Post | null> {
-    return em.findOne(Post, { _id: id });
+  post(@Arg('id') id: number): Promise<Post | null> {
+    return Post.findOne({ where: { _id: id } });
   }
 
+  // refactored to here
   @Mutation(() => Post)
   async createPost(
     @Arg('title') title: string,

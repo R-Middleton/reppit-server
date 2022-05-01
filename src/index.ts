@@ -1,7 +1,5 @@
 import 'reflect-metadata';
-import { MikroORM } from '@mikro-orm/core';
 import { COOKIENAME, __prod__ } from './constants';
-import microConfig from './mikro-orm.config';
 import express from 'express';
 import { ApolloServer } from 'apollo-server-express';
 import { buildSchema } from 'type-graphql';
@@ -13,6 +11,9 @@ import Redis from 'ioredis';
 import connectRedis from 'connect-redis';
 import { MyContext } from './types';
 import cors from 'cors';
+import { DataSource } from 'typeorm';
+import { Post } from './entities/Post';
+import { User } from './entities/User';
 
 declare module 'express-session' {
   interface Session {
@@ -21,8 +22,15 @@ declare module 'express-session' {
 }
 
 const main = async () => {
-  const orm = await MikroORM.init(microConfig);
-  await orm.getMigrator().up();
+  const dataSource = new DataSource({
+    type: 'postgres',
+    database: 'reppit',
+    username: 'postgres',
+    password: '',
+    logging: true,
+    synchronize: true,
+    entities: [Post, User],
+  });
 
   const app = express();
 
@@ -55,7 +63,7 @@ const main = async () => {
       resolvers: [HelloResolver, PostResolver, UserResolver],
       validate: false,
     }),
-    context: ({ req, res }): MyContext => ({ em: orm.em, req, res, redis }),
+    context: ({ req, res }): MyContext => ({ req, res, redis }),
   });
 
   apolloServer.start().then(() => {
